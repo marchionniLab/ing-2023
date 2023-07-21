@@ -1,0 +1,434 @@
+---
+title: "fig6_d_e_f_g.Rmd"
+output:
+  html_document:
+    df_print: paged
+    toc: true
+    toc_depth: 3
+  pdf_document: 
+    toc: true
+    toc_depth: 3
+    fig_caption: yes        
+    includes:  
+      in_header: my_header.tex
+    number_sections: true
+    keep_tex: true
+  word_document: default
+date: "2023-07-18"
+---
+
+```{r setup, include=FALSE}
+suppressPackageStartupMessages(library(gplots))
+suppressPackageStartupMessages(library(ggplot2))
+suppressPackageStartupMessages(library(ggthemes))
+suppressPackageStartupMessages(library(DESeq2))
+suppressPackageStartupMessages(library(limma))
+suppressPackageStartupMessages(library(edgeR))
+suppressPackageStartupMessages(library(ggpubr))
+suppressPackageStartupMessages(library(grid))
+suppressPackageStartupMessages(library(gridExtra))
+suppressPackageStartupMessages(library(dplyr))
+suppressPackageStartupMessages(library(UpSetR))
+suppressPackageStartupMessages(library(pheatmap))
+suppressPackageStartupMessages(library(gplots))
+suppressPackageStartupMessages(library(kableExtra))
+suppressPackageStartupMessages(library(estimate))
+suppressPackageStartupMessages(library(reshape))
+suppressPackageStartupMessages(library(sva))
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(ggsci))
+suppressPackageStartupMessages(library(parallel))
+
+suppressPackageStartupMessages(library(RColorBrewer))
+knitr::opts_chunk$set(echo = FALSE, cache=TRUE, warning=FALSE, message=FALSE)
+```
+
+
+
+
+```{r read_in_tcl}
+library(openxlsx)
+drug_screen <- read.xlsx("TCL_screen_data_reformatted.xlsx") 
+drug_screen <- drug_screen[!is.na(drug_screen$drug),]
+row.names(drug_screen) <- drug_screen$drug
+## dropcell line 
+drug_screen <- drug_screen[,c(-27,-26,-25,-24)]
+drug_screen_just_via <- drug_screen[, c(5:23)]
+
+drug_screen_metadata <- read.xlsx("TCL_screen_data_metadata.xlsx")
+#remove cell line
+drug_screen_metadata <- drug_screen_metadata[c(-20,-21,-22,-23),]
+```
+
+```{r pre-process-kegg-db, eval=F}
+library(openxlsx)
+library(KEGGREST)
+library(data.table)
+
+drug_screen <- read.xlsx("TCL_screen_data_reformatted.xlsx") 
+drug_screen <- drug_screen[!is.na(drug_screen$drug),]
+row.names(drug_screen) <- drug_screen$drug
+#drug_screen$target
+## dropcell line 
+drug_screen <- drug_screen[,c(-27,-26,-25,-24)]
+drug_screen_just_via <- drug_screen[, c(5:23)]
+
+drug_screen <- drug_screen[!duplicated(gsub("\\(.*","",row.names(drug_screen))),]
+row.names(drug_screen) <- gsub("\\(.*","",row.names(drug_screen))
+drug_screen <- drug_screen[which(row.names(drug_screen) !=  ""),]
+drug_ids =  lapply(row.names(drug_screen), function(x) {print(x); keggFind("drug", x)})
+
+drug_ids_df <- lapply(1:length(drug_ids), function(x) {
+    if(length(drug_ids[[x]]) > 0 ){
+    df <- data.frame(id =names(drug_ids[[x]])[1], name = drug_ids[[x]][[1]], num=x )
+      return(df)
+    }
+  }) %>% rbindlist()
+  
+drug_info <- lapply(1:nrow(drug_ids_df), function(x) {
+      id = as.character(drug_ids_df[x,]$id)
+            print(x)
+      num = drug_ids_df[x,]$num
+      x = keggGet(id)
+      target = NA
+      pathway = NA
+      class=NA
+      if(!is.null(x[[1]]$TARGET)){
+        if( is.atomic(x[[1]]$TARGET) ){
+           target = x[[1]]$TARGET
+        } else {
+        target = x[[1]]$TARGET$TARGET
+        target =  gsub("\\[.*","",target)
+      target =  gsub("\\(.*","",target)
+         target =  gsub(" ","",target)
+        if(!is.null(x[[1]]$TARGET$PATHWAY)){
+             pathway =   x[[1]]$TARGET$PATHWAY
+              pathway =   gsub("\\(.*","",pathway)
+        }
+        }
+      }
+      if(!is.null( x[[1]]$CLASS[[1]])){
+              class =  x[[1]]$CLASS[[1]]
+
+      }
+      df <- data.frame(id = id , target = paste0(target, collapse = ","), pathway=paste0(pathway, collapse = ","), class=class,num = num)
+  return(df)
+  })  %>% rbindlist()
+
+
+drug_info <- merge(drug_info, drug_ids_df, by="num")
+drug_info$name  <- as.character(drug_info$name)
+#drug_info$name <- gsub("\\(.*","",drug_info$name)
+drug_info <- drug_info[!duplicated(drug_info$name),]
+drug_info$target  <- as.character(drug_info$target)
+drug_info$target <- gsub("\\(.*","",drug_info$target)
+drug_info$target <- gsub("\\[.*","",drug_info$target)
+drug_info$target <- gsub("/",",",drug_info$target)
+
+
+saveRDS(drug_info, "drug_info.RDS")
+
+drug_screen_just_via_filt  <- drug_screen_just_via[drug_info$num,]
+row.names(drug_screen_just_via_filt)  <- drug_info$name
+saveRDS(drug_screen_just_via_filt, "drug_screen_just_via_filt.RDS")
+```
+
+
+```{r load-kegg-drug-db}
+drug_info <- readRDS("drug_info.RDS")
+drug_screen_just_via_filt <- readRDS("drug_screen_just_via_filt.RDS")
+```
+
+
+
+```{r load-data}
+raw = read.csv("drugscreen.gene.counts.txt", row.names=1, check.names = F)
+sub_met = read.csv("drugscreen.metadata.txt", row.names=1, check.names = F)
+sub_met$TCL.subtype = factor(sub_met$TCL.subtype)
+sub_met$source = factor(sub_met$source)
+table(row.names(sub_met) == colnames(raw))
+```
+
+
+
+```{r pca, fig.align='center', fig.cap="Principal component analysis (PCA) reveals stratification of PDXs and primary tumor samples.", results="asis"}
+deseq2.coldata <- data.frame(row.names = colnames(raw), sub_met, stringsAsFactors=F)
+deseq2.coldata$source <- factor(deseq2.coldata$source)
+deseq2.cds <- DESeq2::DESeqDataSetFromMatrix(countData = raw,colData = deseq2.coldata, design = ~1)
+deseq2.cds <- estimateSizeFactors(deseq2.cds)
+deseq2.rld <- DESeq2::vst(deseq2.cds, blind=TRUE)
+deseq2.rld <- vst(deseq2.cds, blind=TRUE)
+
+
+ntop = nrow(deseq2.rld)
+Pvars <- rowVars(assay(deseq2.rld))
+select <- order(Pvars, decreasing = TRUE)[seq_len(min(ntop, length(Pvars)))]
+PCA <- prcomp(t(assay(deseq2.rld)[select, ]), scale = F)
+percentVar <- round(100*PCA$sdev^2/sum(PCA$sdev^2),1)
+dataGG = data.frame(PC1 = PCA$x[,1], PC2 = PCA$x[,2],PC3 = PCA$x[,3], sampleName = row.names(colData(deseq2.rld)),colData(deseq2.rld))
+qplot(PC1, PC2, data = dataGG, color =TCL.subtype,  size=I(3), main = "Principal component analysis") + labs(x = paste0("PC1: ", round(percentVar[1],4), "% variance"), y = paste0("PC2: ", round(percentVar[2],4), "% variance")) + theme_bw() + theme(legend.position="bottom") +   scale_color_jco() 
+```
+
+# Correlation analysis
+
+
+To investigate the association between expression and drug sensitivity  at gene level, (Pearson) correlation tests were performed to identify genes whose expressions are correlated with the sensitivity to the drugs with respect to the different TCL subtypes. In other words, is the drug response as measured by cell viability related to expression levels of the different TCL subtypes? 
+
+In order to answer to perform correlation, we need two matrices of equal sizes.  The cell viability assay contains replicates for most PDX samples; thus, we will take the average of each replicate to reduce the measurement of any each PDX sample to one.   
+
+There is not a 1:1 mapping of passage time points in the cell viability data to the expression data.  So, we will take the closest RNA-seq passage. Below is a table of the mapping we used:
+
+```{r mapping, echo=FALSE}
+## let's merge reps from viability
+il69.p3 <- rowMeans(drug_screen_just_via_filt[,c(1,2)])
+il69.p11 <- rowMeans(drug_screen_just_via_filt[,c(3,4)])
+DN03.p18 <- rowMeans(drug_screen_just_via_filt[,c(5,6)])
+il79.p7 <- drug_screen_just_via_filt[,c(7)]
+il79.p8 <- rowMeans(drug_screen_just_via_filt[,c(8,9)])
+il2.p5 <- rowMeans(drug_screen_just_via_filt[,c(10,11)])
+il2.p7 <- rowMeans(drug_screen_just_via_filt[,c(12,13)])
+mt05.p6 <-drug_screen_just_via_filt[,c(14)]
+mt05.p8 <-rowMeans(drug_screen_just_via_filt[,c(15,16)])
+mt05.p9 <- drug_screen_just_via_filt[,c(17)]
+il26a.p4 <- rowMeans(drug_screen_just_via_filt[,c(18,19)])
+
+drugs_via_merge <- data.frame(il69.p3=il69.p3,
+                              il69.p11=il69.p11,
+                              DN03.p18=DN03.p18,
+                              il79.p7=il79.p7,
+                              il79.p8=il79.p8,
+                              il2.p5=il2.p5,
+                              il2.p7=il2.p7,
+                              mt05.p6=mt05.p6,
+                              mt05.p8=mt05.p8,
+                              mt05.p9=mt05.p9,
+                              il26a.p4=il26a.p4)
+df = data.frame("Drug-assay sample"= colnames(drugs_via_merge), "RNA-seq sample" = colData(deseq2.rld)$sampleName, TCL.subtype=colData(deseq2.rld)$TCL.subtype)
+kable(df,  "latex", booktabs = T,  row.names=FALSE, caption = 'Summary of samples for correlation analysis. The cell viability for each drug test was correlated with the expression levels each gene across the different TCL subtypes .') 
+```
+
+
+
+
+
+```{r corr-setup, fig.align='center',  fig.width=12, fig.height=12, results="asis",  echo=FALSE}
+table(row.names(sub_met) == colnames(raw))
+deseq2.coldata <- data.frame(row.names = colnames(raw), sub_met, stringsAsFactors=F)
+deseq2.coldata$source <- factor(deseq2.coldata$source)
+deseq2.cds <- DESeq2::DESeqDataSetFromMatrix(countData = raw,colData = deseq2.coldata, design = ~1)
+deseq2.cds <- estimateSizeFactors(deseq2.cds)
+deseq2.rld <- DESeq2::vst(deseq2.cds, blind=TRUE)
+deseq2.rld <- vst(deseq2.cds, blind=TRUE)
+deseq2.rld.unfilt <- vst(deseq2.cds, blind=TRUE)
+keep <- apply(assay(deseq2.rld), 1, function(x) any(x >= 9)) 
+deseq2.rld <- deseq2.rld[keep,]
+
+
+## let's merge reps from viability
+il69.p3 <- rowMeans(drug_screen_just_via_filt[,c(1,2)])
+il69.p11 <- rowMeans(drug_screen_just_via_filt[,c(3,4)])
+DN03.p18 <- rowMeans(drug_screen_just_via_filt[,c(5,6)])
+il79.p7 <- drug_screen_just_via_filt[,c(7)]
+il79.p8 <- rowMeans(drug_screen_just_via_filt[,c(8,9)])
+il2.p5 <- rowMeans(drug_screen_just_via_filt[,c(10,11)])
+il2.p7 <- rowMeans(drug_screen_just_via_filt[,c(12,13)])
+mt05.p6 <-drug_screen_just_via_filt[,c(14)]
+mt05.p8 <-rowMeans(drug_screen_just_via_filt[,c(15,16)])
+mt05.p9 <- drug_screen_just_via_filt[,c(17)]
+il26a.p4 <- rowMeans(drug_screen_just_via_filt[,c(18,19)])
+
+drugs_via_merge <- data.frame(il69.p3=il69.p3,
+                              il69.p11=il69.p11,
+                              DN03.p18=DN03.p18,
+                              il79.p7=il79.p7,
+                              il79.p8=il79.p8,
+                              il2.p5=il2.p5,
+                              il2.p7=il2.p7,
+                              mt05.p6=mt05.p6,
+                              mt05.p8=mt05.p8,
+                              mt05.p9=mt05.p9,
+                              il26a.p4=il26a.p4)
+
+df = data.frame("Drug-assay sample"= colnames(drugs_via_merge), "RNA-seq sample" = colData(deseq2.rld)$sampleName, TCL.subtype=colData(deseq2.rld)$TCL.subtype)
+
+```
+
+
+
+
+
+```{r corr, fig.align='center',  fig.width=12, fig.height=12, results="asis", echo=FALSE, eval=T}
+drug_info <- as.data.frame(drug_info)
+drug_info$pathway <- as.character(drug_info$pathway)
+drug_info = drug_info[grep("Ruxolitinib", drug_info$name),]
+
+all = lapply( drug_info$num , function(y) {
+  num = as.numeric(y)
+  
+  df <- drug_info[ drug_info[["num"]] == num , ]
+  df <- df[,c(2,7,5,3,4)]
+  colnames(df)[1] <- "id"
+  
+  t_df <- t(df)
+  
+  
+  doi <- as.numeric(drugs_via_merge[as.numeric(colnames(t_df)),] )
+  
+  env<-new.env()
+  env$plots1Names<-c()
+  plots1 <- lapply( strsplit(as.character(drug_info[ drug_info[["num"]] == num , ]$target), ",")[[1]] , function(x) {
+    #  print(x)
+    gene = x
+    if(gene != "NA"){
+      if(length(grep(gene, row.names(deseq2.rld.unfilt))) > 0){
+        lapply(  grep(gene, row.names(deseq2.rld.unfilt), value=T), function(x) {
+          #   cat("\n\n##", x, "\n\n")
+          df = data.frame(doi=doi, rna=as.numeric(assay(deseq2.rld.unfilt[x,])), subtype =  colData(deseq2.rld.unfilt)$TCL.subtype, patient = colData(deseq2.rld.unfilt)$patient,  passage = colData(deseq2.rld.unfilt)$passage, name = colData(deseq2.rld.unfilt)$sampleName)
+          row.names(df) <- colnames(deseq2.rld.unfilt)
+          df$subtype <- as.character(df$subtype)
+          p1 <- ggbarplot(df, x="name", y="rna", fill="subtype", ylab="Expression level", xlab="", sort.by.groups=F, sort.val="none", color = "white", x.text.angle = 90) + scale_fill_jco() +    coord_flip() + facet_grid(subtype~., scales="free") 
+          p2 <- ggscatter(df, x="doi", y="rna", color="subtype", xlab="Cell viability", ylab="Expression level", cor.coef=TRUE, size=5, label="patient", legend = "bottom", title=paste0("Target", " : ", x))  + stat_smooth(method=lm, fill = "lightgray")  + scale_color_jco()  
+          #grid.arrange(p1, p2, ncol=2)
+          #return(grid.arrange(p1, p2, ncol=2))
+          env$plots1Names <- c(env$plots1Names, gene)
+          return(arrangeGrob(p1, p2, ncol=2))
+        })
+      }}
+  })
+  names(plots1) <- env$plots1Names 
+  
+  
+  tmp = do.call(rbind, mclapply(1:nrow(deseq2.rld), function(i) {
+    res = cor.test(doi, assay(deseq2.rld[i,])[1,], method = "pearson")
+    data.frame(coef=unname(res$estimate), p=res$p.value)
+  }))
+  
+  corResult <- tibble(ID = rownames(deseq2.rld), 
+                      symbol =  rownames(deseq2.rld),
+                      coef = tmp$coef,
+                      p = tmp$p)
+  
+  corResult <- arrange(corResult, p) %>% mutate(p.adj = p.adjust(p, method="BH"))
+  
+  pCut = 0.05
+  corResult.sig <- filter(corResult, p <= pCut)
+  write.xlsx(corResult.sig,paste0(gsub(" ", "",  drug_info[ drug_info[["num"]] == num , ]$name), ".pearsonCorResultsSig0.05.xlsx"))
+  
+  
+  p1 <- gghistogram(corResult, x="coef", color = "#00AFBB", fill="#00AFBB", rug=T, xlab="Correlation coefficient", main = "Histogram of coefficients")
+  p2 <- gghistogram(corResult, x="p", color = "#E7B800", fill="#E7B800", rug=T, xlab = "P value", main = "Histogram of P values") + geom_vline(xintercept=0.05)
+  p3 <- gghistogram(corResult.sig, x="coef", color = "#00AFBB", fill="#00AFBB", rug=T, xlab="Correlation coefficient", main = "Histogram of coefficients (P < 0.05)")
+  p4 <- gghistogram(corResult.sig, x="p", color = "#E7B800", fill="#E7B800", rug=T, xlab = "P value",  main = "Histogram of P values (P < 0.05)") + geom_vline(xintercept=0.05)
+  # grid.arrange(p1, p2, p3, p4, ncol=2)
+  
+  stats_df = data.frame("genes tested for correlation" = nrow(deseq2.rld), "number correlated (P < 0.05)" = nrow(corResult.sig), check.names = F)
+  
+  
+  gmt.kegg.list <- msigdbr::msigdbr(species = "Homo sapiens", category = "C2", subcategory = "CP:KEGG") %>% dplyr::select(gs_name, gene_symbol) %>% split(x = .$gene_symbol, f = .$gs_name)
+  gmt.kegg <- msigdbr::msigdbr(species = "Homo sapiens", category = "C2", subcategory = "CP:KEGG") %>% dplyr::select(gs_id, gs_name, gene_symbol) 
+  
+  
+  kegg.gs <- EnrichmentBrowser::getGenesets(org="hsa", db="kegg", cache=FALSE)
+  kegg.gs.m = reshape2::melt(kegg.gs)
+  kegg.gs.m$value <- as.character(kegg.gs.m$value )
+  eg <-  clusterProfiler::bitr(kegg.gs.m$value, fromType="ENTREZID", toType="SYMBOL", OrgDb="org.Hs.eg.db") %>% as.data.table
+  kegg.gs.df = merge(kegg.gs.m, eg, by.x="value", by.y="ENTREZID")
+  colnames(kegg.gs.df) <- c("entrezid", "pathway", "symbol")
+  kegg.gs.df$pathwayid <-  gsub("_.*","",kegg.gs.df$pathway)
+  kegg.gs.df$pathwayname <-  sub('.*?_',"",kegg.gs.df$pathway) %>% gsub("_", " ", .)
+  
+  kegg.gs.list <- kegg.gs.df %>% split(x = .$symbol, f = .$pathwayid)
+  
+  library(gridExtra)
+  
+  env<-new.env()
+  env$stats<-data.frame()
+  env$plots2Names<-c()
+  if(drug_info[ drug_info[["num"]] == num , ]$pathway != "NA"){
+    plots2 = lapply( strsplit(as.character(drug_info[ drug_info[["num"]] == num , ]$pathway), ",")[[1]] , function(x) {
+      set = x
+      if(length(corResult.sig$symbol[corResult.sig$symbol %in% kegg.gs.list[[set]]]) >=2){
+        #  cat('\\pagebreak')
+        #   cat("\n\n##", x, "\n\n")
+        env$plots2Names <- c(env$plots2Names, x)
+        
+        stats.sub = data.frame(set=  length(corResult.sig$symbol[corResult.sig$symbol %in% kegg.gs.list[[set]]]))
+        colnames(stats.sub) <- paste0("num sig (P < 0.05) in ", set)
+        if (nrow(env$stats) > 0) {
+          env$stats <- cbind(env$stats, stats.sub)
+        } else {
+          env$stats <- stats.sub
+        }
+        
+        
+        title =paste0(unique(subset(kegg.gs.df, pathwayid == set)$pathwayid), " : ", unique(subset(kegg.gs.df, pathwayid == set)$pathwayname))
+        annotation_col = data.frame(subtype = colData(deseq2.rld)$TCL.subtype, viability = doi)
+        row.names(annotation_col) <- colnames(assay(deseq2.rld))
+        annotation_row = data.frame(coef=corResult.sig$coef[corResult.sig$symbol %in% kegg.gs.list[[set]]], p=corResult.sig$p[corResult.sig$symbol %in% kegg.gs.list[[set]]])
+        row.names(annotation_row) <- corResult.sig$symbol[corResult.sig$symbol %in% kegg.gs.list[[set]]]
+        hm = pheatmap(assay(deseq2.rld)[corResult.sig$symbol[corResult.sig$symbol %in% kegg.gs.list[[set]]],], scale="row", cluster_cols = T, annotation_col = annotation_col, annotation_row=annotation_row, color = viridis::inferno(100),cellwidth =25, cellheight = 400/nrow(annotation_row), main = title, silent=T)
+        hm2 = pheatmap(assay(deseq2.rld)[corResult.sig$symbol[corResult.sig$symbol %in% kegg.gs.list[[set]]],], scale="row", cluster_cols = F, annotation_col = annotation_col, annotation_row=annotation_row, color = viridis::inferno(100),cellwidth =25, cellheight = 400/nrow(annotation_row), main = title, silent=T) 
+
+        return(arrangeGrob(grobs = list(hm[[4]]), ncol=1))
+      } else if (length(corResult.sig$symbol[corResult.sig$symbol %in% kegg.gs.list[[set]]]) > 0){
+        env$plots2Names <- c(env$plots2Names, x)
+        stats.sub = data.frame(set=  length(corResult.sig$symbol[corResult.sig$symbol %in% kegg.gs.list[[set]]]))
+        colnames(stats.sub) <- paste0("num sig (P < 0.05) in ", set)
+        if (nrow(env$stats) > 0) {
+          env$stats <- cbind(env$stats, stats.sub)
+        } else {
+          env$stats <- stats.sub
+        }
+        
+        goi = corResult.sig$symbol[corResult.sig$symbol %in% kegg.gs.list[[set]]]
+        cpm_df <- assay(deseq2.rld[goi,]) %>% reshape2::melt(., id.vars = rownames)
+        names(cpm_df) <- c("gene","sample","exprs")
+        cpm_df <- merge(cpm_df, colData(deseq2.rld), by.x = "sample", by.y="sampleName")
+        p <- ggdotplot(as.data.frame(cpm_df), x="sample", y="exprs", fill="TCL.subtype", color="TCL.subtype", facet.by=c("gene", "TCL.subtype"), scales="free", ylab = "Expression level")
+      }
+    })  %>% invisible()
+  }
+  
+  names(plots2) <- env$plots2Names 
+  
+  cat('\\pagebreak')
+  cat("\n\n#", drug_info[ drug_info[["num"]] == num , ]$name, "\n\n")
+  
+  
+  if(nrow(env$stats) > 0 ){
+    print(kable(rbind(t_df, t(stats_df), (t(env$stats))),  "latex", booktabs = T,  row.names=T, col.names="") %>% kable_styling(latex_options = c("striped")))
+  } else {
+    print(kable(rbind(t_df, t(stats_df), t(data.frame("num sig in pathways" = 0,  check.names = F))),  "latex", booktabs = T,  row.names=T, col.names="") %>% kable_styling(latex_options = c("striped")))
+  }
+  
+  print(grid.arrange(p1, p2, p3, p4, ncol=2))
+  
+  lapply(names(plots1), function(x) {
+    if(!is.null(plots1[[x]])){
+      x = x
+      cat("\n\n##", x, "\n\n")
+      grid.arrange((arrangeGrob(grobs = list(plots1[[x]][[1]]))))
+      cat('\\pagebreak')
+    }
+  })
+  
+  lapply(names(plots2), function(x) {
+    if(!is.null(plots2[[x]])){
+      cat('\\pagebreak')
+      grid.arrange((arrangeGrob(grobs = list(plots2[[x]]))))
+      cat("\n\n##", x, "\n\n")
+    }
+  })
+  
+})
+
+```
+
+
+
+
+# Session Info
+
+```{r session, message=FALSE, warning=FALSE, cache=FALSE,echo=FALSE, fig.width=10, fig.height=5.5, context="data"}
+sessionInfo()
+```
