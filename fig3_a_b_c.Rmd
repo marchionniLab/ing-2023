@@ -25,16 +25,16 @@ suppressPackageStartupMessages(library(sva))
 suppressPackageStartupMessages(library(data.table))
 suppressPackageStartupMessages(library(ggsci))
 suppressPackageStartupMessages(library(RColorBrewer))
-knitr::opts_chunk$set(echo = TRUE, cache=FALSE, cache.lazy = FALSE, message=FALSE, warning = FALSE)
+knitr::opts_chunk$set(echo = TRUE, cache = FALSE, cache.lazy = FALSE, message = FALSE, warning = FALSE)
 ```
 
 
 
 ```{r load-data}
-counts = read.csv("gene.counts.txt", row.names=1, check.names = F)
-metadata = read.csv("metadata.txt", row.names=1, check.names = F)
-metadata$TCL.subtype = factor(metadata$TCL.subtype)
-metadata$source = factor(metadata$source)
+counts <- read.csv("gene.counts.txt", row.names = 1, check.names = F)
+metadata <- read.csv("metadata.txt", row.names = 1, check.names = F)
+metadata$TCL.subtype <- factor(metadata$TCL.subtype)
+metadata$source <- factor(metadata$source)
 table(row.names(metadata) == colnames(counts))
 ```
 
@@ -47,7 +47,7 @@ library(ggplot2)
 # Design matrix and filtering
 design <- model.matrix(~TCL.subtype, data = metadata)
 filter <- filterByExpr(counts, design = design)
-filtered_counts <- counts[filter,]
+filtered_counts <- counts[filter, ]
 y <- DGEList(counts = filtered_counts, group = metadata$TCL.subtype)
 y <- calcNormFactors(y)
 cpm <- cpm(y, log = FALSE)
@@ -69,13 +69,17 @@ percentVar <- round(100 * PCA$sdev^2 / sum(PCA$sdev^2), 1)
 dataGG <- merge(data.frame(PC1 = PCA$x[, 1], PC2 = PCA$x[, 2], PC3 = PCA$x[, 3]), metadata, by = "row.names")
 
 # Plotting
-p1 <- qplot(PC1, PC2, data = dataGG, color = TCL.subtype, shape = source, size = I(2), 
-              main = "Principal component analysis") +
-        labs(x = paste0("PC1: ", round(percentVar[1], 4), "% variance"), 
-             y = paste0("PC2: ", round(percentVar[2], 4), "% variance")) +
-        theme_bw() +
-        theme(legend.position = "right") +
-        scale_color_jco()
+p1 <- qplot(PC1, PC2,
+  data = dataGG, color = TCL.subtype, shape = source, size = I(2),
+  main = "Principal component analysis"
+) +
+  labs(
+    x = paste0("PC1: ", round(percentVar[1], 4), "% variance"),
+    y = paste0("PC2: ", round(percentVar[2], 4), "% variance")
+  ) +
+  theme_bw() +
+  theme(legend.position = "right") +
+  scale_color_jco()
 
 print(p1)
 ```
@@ -86,19 +90,18 @@ print(p1)
 Differential gene expression analysis w/ limma 
 
 ```{r limma_with_sva, eval=T}
-modSv = cbind(mod1, svseq$sv)
+modSv <- cbind(mod1, svseq$sv)
 
-v <- voom(y, modSv, plot=F)
+v <- voom(y, modSv, plot = F)
 fit <- lmFit(v, modSv)
 fit <- eBayes(fit)
 
-anova <-  topTable(fit, coef=2:4, p.value=0.01, n=1000, lfc=1)
+anova <- topTable(fit, coef = 2:4, p.value = 0.01, n = 1000, lfc = 1)
 ```
 
 
 
 ```{r heatmap_limma_anova, fig.align='center', fig.cap="Heatmap of SVA adjusted, log2 counts per million (CPM) values for top 1000 genes differentially expressed between any of the subtypes. Differential expression analysis was performed using limma-voom's ANOVA-like F-test (FDR<0.01; logFC > 1). Expression across each gene (or row) have been scaled so that mean expression is zero and standard deviation is one. Samples with relatively high expression of a given gene are colored red and samples with relatively low expression are colored gray. Lighter shades and white represent genes with intermediate expression levels. Samples and genes have been reordered by hierarchical clustering. A dendrogram is shown for the sample clustering.", fig.height=10}
-
 # Define breaks, markers, and metadata
 breaksList <- seq(-2.5, 2.5, by = 0.1)
 all_markers <- row.names(anova)
@@ -113,22 +116,22 @@ names(mycolors) <- unique(sub_metadata$TCL.subtype)
 mycolors <- list(tumor = mycolors)
 
 # Create heatmap
-pheatmap(counts_sva[all_markers, row.names(sub_metadata)], 
-         fontsize_row = 6,
-         annotation_col = expgroups[, 1, drop = FALSE],
-         fontsize = 6,
-         main = "",
-         show_rownames = FALSE,
-         show_colnames = FALSE,
-         cluster_cols = TRUE,
-         cluster_rows = TRUE,
-         scale = "row",
-         colorRampPalette(rev(brewer.pal(n = 5, name = "RdGy")))(length(breaksList)),
-         breaks = breaksList,
-         annotation_colors = mycolors,
-         cellwidth = 3.75,
-         cellheight = 0.75 / (nrow(anova) / 500))
-
+pheatmap(counts_sva[all_markers, row.names(sub_metadata)],
+  fontsize_row = 6,
+  annotation_col = expgroups[, 1, drop = FALSE],
+  fontsize = 6,
+  main = "",
+  show_rownames = FALSE,
+  show_colnames = FALSE,
+  cluster_cols = TRUE,
+  cluster_rows = TRUE,
+  scale = "row",
+  colorRampPalette(rev(brewer.pal(n = 5, name = "RdGy")))(length(breaksList)),
+  breaks = breaksList,
+  annotation_colors = mycolors,
+  cellwidth = 3.75,
+  cellheight = 0.75 / (nrow(anova) / 500)
+)
 ```
 
 
@@ -150,24 +153,24 @@ pheatmap(counts_sva[all_markers, row.names(sub_metadata)],
 
 ```{r read_in_signatures}
 # https://www.ncbi.nlm.nih.gov/pmc/articles/PMC2817630/
-AITL = toupper(c("LTA","TNFSF1","LTB","TNFSF3","TNFRSF4","OX40","CD134","TNFRSF17BCM","CD269","TNFSF8","CD30L","CD153","CSF2RB","CD131","CCL17","CCL19","CCL20","CCL21CCL22","CXCL8","IL8","CXCL5","CXCL13","CXCR5","CD79a","CD19","FCRL5","CD22","IgH","IgK","IgL","MS4A1","CD20","CR1","CD21","CD23","CD24","CD37","FCRLA","AICD","ID3","SpiB","CR1","CR2","CD21","CD23","CLU","CD200","C4orf7","C1S","C3","C4A","C7","ICOS","CTLA4","SOX8","XKR4","GPR64","PTGDS","NTN2L","PLA2G2D","ALPK2","NT5DC4","IFNαR1","IFNγR1","IFNγR2","IL16","IL3RA","IL7","CCL18","CCL26","CXCL9","CXCL10","IL8","IL23A","CCR2","CSF2RA","CSF1R","CX3CR1","CXCL12","CSF2RB","CSF3R","IL-1α","IL21","IL21R","IL23","IL27Rα","IL2Rγ","LTF","IL4","IL6","IL33","IL4R","IL6R","IL6ST","TNF","TNFRSF11B","TNFRSF1B","TNFSF10","TNFSF11","TNFRSF13C","TNFSF13B","TNFSF13","TNFSF5","CD40LG","TGFβ1","TGFβR2","IL10Rα","IL10Rβ","VSTM3VSIG1","LILRB4","LILRB3","LILRB2","LILRB1","LILRA2","LIFR","LIF","CD19","BLNK","BANK1","BLK","BTK","BTLA","CD79A","CD79B","LYN","SYK","VAV3","SHB","SHCBP1","SOS1","FCGR2B","CD32","FDC-M2","C4b","CR1","CR1L","CR2","C1QBP","C1R","C2","C3","C4BPA","C4A","C5AR1","C7","CFB","CFHR1","CFP","CTSA","CTSC","CTSD","CTSH","CTSK","CTSS","CTSZ","CD10","BCL6","AICDA","GCET1","CXCR5","CD40","POU2AF1","BOB1","POU2F2","CD28","CD3δ","CD3ϵ","CD3γ","CD4","CD8α","CD8β","LCK","FYN","PTPRC","CD45","NFATC1","NFATC2IPNFATC","CD28","CD27","PCD1","PD1","BTLA","SH2D1ASAP","CD84","LY9","CD229","SLAM3LY108","SLAM6","SLAMF7","CRACC","EDG1","EDG2","EDG3","EDG4","EPHA2","EPHA3","EPHA4","EPHB1","EPHB2","FGFR2I","PCDHAC2","PCDH11X","PCDHA10","PCDHA12","ICAM1","ICAM2","ICAM3","ICAM5","VCAM1","MCM3AP","MCM5","MCM7","NEK3","NEK6","CCNC","CCND2","CCND3","CNDBP1","CCNG2","CCNI","CCNL1","CCNL2","GSPT2","CDK5R1","CDKN1B","CDC25B","CDC2L1","CDC2L2","CDC37","CDC42","CDC42BPB","CDC42EP4","CDC42EP5","CDC42SE2","CLK1","CDK2AP2","CIZ1","CRK","ERG","ETS1","FGR","FOS","JUN","MET1","MYCMYB","MAF","PVT1","BCL2","BCL2A1","BCL2L1","FAIM3"))
-PMC2817630_AITL = AITL[AITL %in% row.names(counts_sva)]
+AITL <- toupper(c("LTA", "TNFSF1", "LTB", "TNFSF3", "TNFRSF4", "OX40", "CD134", "TNFRSF17BCM", "CD269", "TNFSF8", "CD30L", "CD153", "CSF2RB", "CD131", "CCL17", "CCL19", "CCL20", "CCL21CCL22", "CXCL8", "IL8", "CXCL5", "CXCL13", "CXCR5", "CD79a", "CD19", "FCRL5", "CD22", "IgH", "IgK", "IgL", "MS4A1", "CD20", "CR1", "CD21", "CD23", "CD24", "CD37", "FCRLA", "AICD", "ID3", "SpiB", "CR1", "CR2", "CD21", "CD23", "CLU", "CD200", "C4orf7", "C1S", "C3", "C4A", "C7", "ICOS", "CTLA4", "SOX8", "XKR4", "GPR64", "PTGDS", "NTN2L", "PLA2G2D", "ALPK2", "NT5DC4", "IFNαR1", "IFNγR1", "IFNγR2", "IL16", "IL3RA", "IL7", "CCL18", "CCL26", "CXCL9", "CXCL10", "IL8", "IL23A", "CCR2", "CSF2RA", "CSF1R", "CX3CR1", "CXCL12", "CSF2RB", "CSF3R", "IL-1α", "IL21", "IL21R", "IL23", "IL27Rα", "IL2Rγ", "LTF", "IL4", "IL6", "IL33", "IL4R", "IL6R", "IL6ST", "TNF", "TNFRSF11B", "TNFRSF1B", "TNFSF10", "TNFSF11", "TNFRSF13C", "TNFSF13B", "TNFSF13", "TNFSF5", "CD40LG", "TGFβ1", "TGFβR2", "IL10Rα", "IL10Rβ", "VSTM3VSIG1", "LILRB4", "LILRB3", "LILRB2", "LILRB1", "LILRA2", "LIFR", "LIF", "CD19", "BLNK", "BANK1", "BLK", "BTK", "BTLA", "CD79A", "CD79B", "LYN", "SYK", "VAV3", "SHB", "SHCBP1", "SOS1", "FCGR2B", "CD32", "FDC-M2", "C4b", "CR1", "CR1L", "CR2", "C1QBP", "C1R", "C2", "C3", "C4BPA", "C4A", "C5AR1", "C7", "CFB", "CFHR1", "CFP", "CTSA", "CTSC", "CTSD", "CTSH", "CTSK", "CTSS", "CTSZ", "CD10", "BCL6", "AICDA", "GCET1", "CXCR5", "CD40", "POU2AF1", "BOB1", "POU2F2", "CD28", "CD3δ", "CD3ϵ", "CD3γ", "CD4", "CD8α", "CD8β", "LCK", "FYN", "PTPRC", "CD45", "NFATC1", "NFATC2IPNFATC", "CD28", "CD27", "PCD1", "PD1", "BTLA", "SH2D1ASAP", "CD84", "LY9", "CD229", "SLAM3LY108", "SLAM6", "SLAMF7", "CRACC", "EDG1", "EDG2", "EDG3", "EDG4", "EPHA2", "EPHA3", "EPHA4", "EPHB1", "EPHB2", "FGFR2I", "PCDHAC2", "PCDH11X", "PCDHA10", "PCDHA12", "ICAM1", "ICAM2", "ICAM3", "ICAM5", "VCAM1", "MCM3AP", "MCM5", "MCM7", "NEK3", "NEK6", "CCNC", "CCND2", "CCND3", "CNDBP1", "CCNG2", "CCNI", "CCNL1", "CCNL2", "GSPT2", "CDK5R1", "CDKN1B", "CDC25B", "CDC2L1", "CDC2L2", "CDC37", "CDC42", "CDC42BPB", "CDC42EP4", "CDC42EP5", "CDC42SE2", "CLK1", "CDK2AP2", "CIZ1", "CRK", "ERG", "ETS1", "FGR", "FOS", "JUN", "MET1", "MYCMYB", "MAF", "PVT1", "BCL2", "BCL2A1", "BCL2L1", "FAIM3"))
+PMC2817630_AITL <- AITL[AITL %in% row.names(counts_sva)]
 
-ATLL = toupper(c("TCRα","TCRβ","CD1ϵ","CTLA4","CD99","TRAC","TNFRSF25","DR3","CD27","LEF1","NFATC1","CCR4","CCL13","IL23R","MAGEA4","MAGEA9","MAGEA4B","PGDS ","AICDA","MTA3","IKZF2","RGS13","PTHLH","RGS13","CADM1","c-Myc","TIAM1","PDE8B","DOK5","ARNT2","UST","PGDSMYCN","PDE8B","CEBPA","RGS13","PTHLH","SMARCA2","CD99","CADM1","TSLC1","CCR4","RGS2","SPINK2","RORA","TCRα","TCRβ","CD1ϵ","CTLA4","CD99","TRAC","TNFRSF25","DR3","CD27","LEF1","NFATC1","CCR4","CCL13","IL23R","MAGEA4","MAGEA9","MAGEA4B","PGDS","AICDA","MTA3","IKZF2","RGS13","PTHLH","RGS13","CADM1","TSLC1","c-Myc","TIAM1","PDE8B","DOK5","ARNT2","UST","PGDSMYCN","PDE8B","CEBPA","RGS13","PTHLH","SMARCA2","CD99","CADM1","TSLC1","CCR4","RGS2","SPINK2","RORA"))
-PMC2817630_ATLL = ATLL[ATLL %in% row.names(counts_sva)]
+ATLL <- toupper(c("TCRα", "TCRβ", "CD1ϵ", "CTLA4", "CD99", "TRAC", "TNFRSF25", "DR3", "CD27", "LEF1", "NFATC1", "CCR4", "CCL13", "IL23R", "MAGEA4", "MAGEA9", "MAGEA4B", "PGDS ", "AICDA", "MTA3", "IKZF2", "RGS13", "PTHLH", "RGS13", "CADM1", "c-Myc", "TIAM1", "PDE8B", "DOK5", "ARNT2", "UST", "PGDSMYCN", "PDE8B", "CEBPA", "RGS13", "PTHLH", "SMARCA2", "CD99", "CADM1", "TSLC1", "CCR4", "RGS2", "SPINK2", "RORA", "TCRα", "TCRβ", "CD1ϵ", "CTLA4", "CD99", "TRAC", "TNFRSF25", "DR3", "CD27", "LEF1", "NFATC1", "CCR4", "CCL13", "IL23R", "MAGEA4", "MAGEA9", "MAGEA4B", "PGDS", "AICDA", "MTA3", "IKZF2", "RGS13", "PTHLH", "RGS13", "CADM1", "TSLC1", "c-Myc", "TIAM1", "PDE8B", "DOK5", "ARNT2", "UST", "PGDSMYCN", "PDE8B", "CEBPA", "RGS13", "PTHLH", "SMARCA2", "CD99", "CADM1", "TSLC1", "CCR4", "RGS2", "SPINK2", "RORA"))
+PMC2817630_ATLL <- ATLL[ATLL %in% row.names(counts_sva)]
 
-ALK_pos = toupper(c("ALK","CD30","MUC1","IL26","IL31RA","IL9","IL1R2","IL17A","IL17F","RORγ","CCNA1","AGT","PDE4DIP","UPK1B","RRAD","RARα"," NRCAM","TMEM158","CA12","SERPINB3","SERPINB4","IL20","IL22","IL2RA","IL1RAP","IL1R1","CDC27","FGF5","FOSL2","VCAN","TNFRSF12A","SOCS1","SOCS3","PRF1","GZMB","LILRA3"))
-PMC2817630_ALKpos = ALK_pos[ALK_pos %in% row.names(counts_sva)]
+ALK_pos <- toupper(c("ALK", "CD30", "MUC1", "IL26", "IL31RA", "IL9", "IL1R2", "IL17A", "IL17F", "RORγ", "CCNA1", "AGT", "PDE4DIP", "UPK1B", "RRAD", "RARα", " NRCAM", "TMEM158", "CA12", "SERPINB3", "SERPINB4", "IL20", "IL22", "IL2RA", "IL1RAP", "IL1R1", "CDC27", "FGF5", "FOSL2", "VCAN", "TNFRSF12A", "SOCS1", "SOCS3", "PRF1", "GZMB", "LILRA3"))
+PMC2817630_ALKpos <- ALK_pos[ALK_pos %in% row.names(counts_sva)]
 
 
-CT_ptcl = toupper(c("PRF1","GNLY","FADD","FASLG","CD244","2B4","FCGR3B","CD16","FCGR2C","CD32","CD226","DNAM-1","CD8α","CD8β","TBX21","KIR3DL1","KIR3DL2","KIR3DL3","KIR3DS1","KIR2DL1","KIR2DL2","KIR2DL3","KIR2DL4","KIR2DL5A","KIR2DS","KIR2DS2","KIR2DS3","KIR2DS5","KLRB1","KLRC2","KLRC3","KLRC4","KLRD1","KLRF1","KLRK1","CX3CR1","CXCR3","CXCL9","CXCL10","CXCL11","CCR1","CCR5","CXCR4","CCL2","CCL5","CCL8","CCL13","CCL18","XCL1","XCL2","IFNαR1","IFNγR1","IFNγR1","IFNγR2","IL1RN","IL1R1","IL1R2","IL13Rα1","IL17Rβ","IL18","IL18RAP","IL2Rβ","IL2Rγ","IL21R","IL22","IL27Rα","IL31Rα","IL32","ILF2","ILF3","TNFSF10","TNFSF13","TNFSF14","TNFRSF12α","TNFRSF1A","TNFRSF1B","TNFSF5IP1","INDO","TGFβ1","TGFβR1","IL10","IL10Rβ","VSIG4","LILRB4","LILRB3","LILRB2","LILRB1","LILRA2","CD47","SH2DIA","LY96","LY6E","SLAM-5","SLAM-6","SLAM-7","SLAM-8"))
-PMC2817630_CT_PTCL = CT_ptcl[CT_ptcl %in% row.names(counts_sva)]
-PMC2817630 <- list(PMC2817630_CT_PTCL=PMC2817630_CT_PTCL, "PMC2817630_ALK+"=PMC2817630_ALKpos, PMC2817630_ATLL=PMC2817630_ATLL, PMC2817630_AITL=PMC2817630_AITL)
+CT_ptcl <- toupper(c("PRF1", "GNLY", "FADD", "FASLG", "CD244", "2B4", "FCGR3B", "CD16", "FCGR2C", "CD32", "CD226", "DNAM-1", "CD8α", "CD8β", "TBX21", "KIR3DL1", "KIR3DL2", "KIR3DL3", "KIR3DS1", "KIR2DL1", "KIR2DL2", "KIR2DL3", "KIR2DL4", "KIR2DL5A", "KIR2DS", "KIR2DS2", "KIR2DS3", "KIR2DS5", "KLRB1", "KLRC2", "KLRC3", "KLRC4", "KLRD1", "KLRF1", "KLRK1", "CX3CR1", "CXCR3", "CXCL9", "CXCL10", "CXCL11", "CCR1", "CCR5", "CXCR4", "CCL2", "CCL5", "CCL8", "CCL13", "CCL18", "XCL1", "XCL2", "IFNαR1", "IFNγR1", "IFNγR1", "IFNγR2", "IL1RN", "IL1R1", "IL1R2", "IL13Rα1", "IL17Rβ", "IL18", "IL18RAP", "IL2Rβ", "IL2Rγ", "IL21R", "IL22", "IL27Rα", "IL31Rα", "IL32", "ILF2", "ILF3", "TNFSF10", "TNFSF13", "TNFSF14", "TNFRSF12α", "TNFRSF1A", "TNFRSF1B", "TNFSF5IP1", "INDO", "TGFβ1", "TGFβR1", "IL10", "IL10Rβ", "VSIG4", "LILRB4", "LILRB3", "LILRB2", "LILRB1", "LILRA2", "CD47", "SH2DIA", "LY96", "LY6E", "SLAM-5", "SLAM-6", "SLAM-7", "SLAM-8"))
+PMC2817630_CT_PTCL <- CT_ptcl[CT_ptcl %in% row.names(counts_sva)]
+PMC2817630 <- list(PMC2817630_CT_PTCL = PMC2817630_CT_PTCL, "PMC2817630_ALK+" = PMC2817630_ALKpos, PMC2817630_ATLL = PMC2817630_ATLL, PMC2817630_AITL = PMC2817630_AITL)
 
 # from giorgio
-sigs = openxlsx::read.xlsx("signatures_reformated_v2.xlsx", fill=F)
-sig_list = as.list(sigs)
-sig_list=  lapply(sig_list, function(x) toupper(x[!is.na(x)][x[!is.na(x)] %in% row.names(counts_sva)]))
+sigs <- openxlsx::read.xlsx("signatures_reformated_v2.xlsx", fill = F)
+sig_list <- as.list(sigs)
+sig_list <- lapply(sig_list, function(x) toupper(x[!is.na(x)][x[!is.na(x)] %in% row.names(counts_sva)]))
 
 sig_list_custom <- c(sig_list, PMC2817630)
 ```
@@ -175,17 +178,17 @@ sig_list_custom <- c(sig_list, PMC2817630)
 ```{r gsva, fig.width = 12, fig.height = 5, message = FALSE, message = FALSE, eval=TRUE, warning=FALSE, cache=TRUE, echo=FALSE, comment=FALSE}
 library(GSVA)
 
-esrnaseq <- gsva(as.matrix(counts_sva), sig_list_custom, method="gsva", min.sz=10, max.sz=500, mx.diff=TRUE, verbose=FALSE, parallel.sz=1)
+esrnaseq <- gsva(as.matrix(counts_sva), sig_list_custom, method = "gsva", min.sz = 10, max.sz = 500, mx.diff = TRUE, verbose = FALSE, parallel.sz = 1)
 
 fit <- lmFit(esrnaseq, mod1)
 fit <- eBayes(fit)
 
-anova <-  topTable(fit, coef=2:4, p.value=0.05, n=500)
+anova <- topTable(fit, coef = 2:4, p.value = 0.05, n = 500)
 ```
 
 
 ```{r gsva_heat, fig.width = 15, fig.height = 5, message = FALSE, message = FALSE, eval=TRUE, warning=FALSE, cache=TRUE, echo=FALSE, comment=FALSE, fig.cap="Heatmap of enrichment scores per sample. Single sample gene set enrichment analysis was performed with GSVA on custom gene sets using SVA adjusted log2 counts per million (CPM). Differential enrichment analysis was performed using limma's ANOVA-like F-test (FDR<0.05) on GSVA enrichment scores. Enrichment scores across each gene set (or row) have been scaled so that mean expression is zero and standard deviation is one. Samples with relatively high enrichment in a given gene set are colored red and samples with relatively low expression are colored gray Samples and gene sets have been reordered by hierarchical clustering. A dendrogram is shown for the sample clustering."}
-goi = anova$ID 
+goi <- anova$ID
 
 newCols <- colorRampPalette(pal_jco("default")(length(unique(metadata$TCL.subtype))))
 mycolors <- newCols(length(unique(metadata$TCL.subtype)))
@@ -194,11 +197,11 @@ names(mycolors) <- unique(metadata$TCL.subtype)
 newPdxCols <- colorRampPalette(pal_jama()(length(unique(metadata$source))))
 pdxColors <- newPdxCols(length(unique(metadata$source)))
 names(pdxColors) <- unique(metadata$source)
-mycolors <- list(tumor = mycolors, source=pdxColors)
+mycolors <- list(tumor = mycolors, source = pdxColors)
 
-expgroups <- data.frame(tumor=metadata$TCL.subtype, source=metadata$source)
-rownames(expgroups) <- colnames(counts_sva[,row.names(metadata)])
-pheatmap(esrnaseq[goi,], scale="row", show_rownames=T,cluster_cols = T,  colorRampPalette(rev(brewer.pal(n = 5, name = "RdGy")))(length(breaksList)), breaks = breaksList,  cellwidth=7, cellheight=9, fontsize_row = 10, annotation_col=expgroups, annotation_colors=mycolors, fontsize_col = 7)
+expgroups <- data.frame(tumor = metadata$TCL.subtype, source = metadata$source)
+rownames(expgroups) <- colnames(counts_sva[, row.names(metadata)])
+pheatmap(esrnaseq[goi, ], scale = "row", show_rownames = T, cluster_cols = T, colorRampPalette(rev(brewer.pal(n = 5, name = "RdGy")))(length(breaksList)), breaks = breaksList, cellwidth = 7, cellheight = 9, fontsize_row = 10, annotation_col = expgroups, annotation_colors = mycolors, fontsize_col = 7)
 ```
 
 

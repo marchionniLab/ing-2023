@@ -1,0 +1,932 @@
+---
+
+---
+
+## Figure4A
+
+```bash
+#CNVkit2 Talevich E, Shain AH, Botton T, Bastian BC. CNVkit: Genome-Wide Copy Number Detection and Visualization from Targeted DNA Sequencing. PLoS Comput Biol. 2016;12(4):e1004873.
+mkdir -p ~/.config/matplotlib
+echo "figure.figsize: 20, 30" > ~/.config/matplotlib/matplotlibrc
+cnvkit.py heatmap `cat order_seg.txt` -d --no-shift-xy -o ordered_PDTX_d.pdf
+```
+
+## Figure4B
+
+```bash
+#GISTIC 2.0 Mermel CH, Schumacher SE, Hill B, Meyerson ML, Beroukhim R, Getz G. GISTIC2.0 facilitates sensitive and confident localization of the targets of focal somatic copy-number alteration in human cancers. Genome Biol. 2011;12(4):R41.
+cd ./GISTIC
+segfile=./PTCL_CNVkit_call.seg
+refgenefile=./refgenefiles/hg19.mat
+basedir=$(basename $segfile .seg)"_result_gistic"
+mkdir $basedir
+cd $basedir
+gp_gistic2_from_seg -b $basedir -seg $segfile -refgene $refgenefile -genegistic 1 -smallmem 1 -broad 1 -js 4 -qvt 0.25 -brlen 0.98 -conf 0.95 -armpeel 1 -savegene 1
+```
+## Figure4C
+
+Rscripts
+
+```{r}
+rm(list = ls())
+# read top60 mutation recurrence file
+library(readxl)
+mutation_lanscape <- read_excel("./ALCL_mutation_lanscape_recurrence_above1_select60gene.xlsx", sheet = 1)
+
+mutation_lanscape <- as.data.frame(mutation_lanscape)
+mutation_lanscape[is.na(mutation_lanscape)] <- ""
+rownames(mutation_lanscape) <- mutation_lanscape$Gene
+mutation_lanscape6 <- mutation_lanscape[which(mutation_lanscape$keep_or_remove == "keep"), ]
+
+# PTCL_mutation_pathway.xlsx
+
+PTCL_mutation_pathway <- read_excel("./PTCL_mutation_pathway.xlsx", sheet = 1)
+PTCL_mutation_pathway <- as.data.frame(PTCL_mutation_pathway)
+PTCL_mutation_pathway_gene <- PTCL_mutation_pathway$Recurrent_genomic_alteration
+
+PTCL_gene <- rownames(mutation_lanscape)
+PTCL_gene1 <- rownames(mutation_lanscape6)
+
+PTCL_intersect_gene <- intersect(PTCL_mutation_pathway_gene, PTCL_gene)
+mutation_lanscape_test <- mutation_lanscape[PTCL_intersect_gene, ]
+genelist <- union(PTCL_gene1, PTCL_intersect_gene)
+setdiff(PTCL_intersect_gene, PTCL_gene1)
+
+testmutation_lanscape <- mutation_lanscape[genelist, -1:-8]
+for (m in 1:nrow(testmutation_lanscape)) {
+  for (n in 1:ncol(testmutation_lanscape)) {
+    if (testmutation_lanscape[m, n] %in% "5_prime_UTR_premature_start_codon_gain_variant;") {
+      testmutation_lanscape[m, n] <- "prime_UTR_premature_start_codon_gain_variant;"
+    }
+  }
+}
+
+
+library(ComplexHeatmap)
+library(circlize)
+# set color
+col <- c(
+  "missense_variant" = "#696969",
+  "inframe_insertion" = "#97FFFF",
+  "frameshift_variant" = "#FFC1C1",
+  "stop_lost" = "RosyBrown1",
+  "exon_loss_variant" = "Sienna1",
+  "stop_retained_variant" = "Burlywood1",
+  "stop_gained" = "#6495ED",
+  "inframe_deletion" = "#FFEC8B",
+  "start_lost" = "RosyBrown1",
+  "splice_region_variant" = "#A1D99B",
+  "disruptive_inframe_deletion" = "Orange1",
+  "disruptive_inframe_insertion" = "RoyalBlue1",
+  "splice_donor_variant" = "#998EC3",
+  "splice_acceptor_variant" = "SkyBlue1",
+  "prime_UTR_premature_start_codon_gain_variant" = "pink",
+  "unknown" = "grey"
+)
+
+alter_fun <- list(
+  background = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = "#FFFFFF", col = "#BEBEBE")
+    )
+  },
+  missense_variant = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["missense_variant"], col = NA)
+    )
+  },
+  inframe_insertion = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["inframe_insertion"], col = NA)
+    )
+  },
+  frameshift_variant = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["frameshift_variant"], col = NA)
+    )
+  },
+  stop_lost = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["stop_lost"], col = NA)
+    )
+  },
+  exon_loss_variant = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["exon_loss_variant"], col = NA)
+    )
+  },
+  stop_retained_variant = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["stop_retained_variant"], col = NA)
+    )
+  },
+  stop_gained = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["stop_gained"], col = NA)
+    )
+  },
+  inframe_deletion = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["inframe_deletion"], col = NA)
+    )
+  },
+  start_lost = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["start_lost"], col = NA)
+    )
+  },
+  splice_region_variant = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["splice_region_variant"], col = NA)
+    )
+  },
+  disruptive_inframe_deletion = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["disruptive_inframe_deletion"], col = NA)
+    )
+  },
+  disruptive_inframe_insertion = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["disruptive_inframe_insertion"], col = NA)
+    )
+  },
+  splice_donor_variant = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["splice_donor_variant"], col = NA)
+    )
+  },
+  splice_acceptor_variant = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["splice_acceptor_variant"], col = NA)
+    )
+  }, prime_UTR_premature_start_codon_gain_variant = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["prime_UTR_premature_start_codon_gain_variant"], col = NA)
+    )
+  }, unknown = function(x, y, w, h) {
+    grid.rect(x, y, w - unit(0.5, "mm"), h - unit(0.5, "mm"),
+      gp = gpar(fill = col["unknown"], col = NA)
+    )
+  }
+)
+
+samplename <- colnames(testmutation_lanscape)
+
+Sampleorder <- read_excel("./Sampleorder_pathway_60_sub.xlsx", sheet = 2)
+
+Sampleorder <- as.data.frame(Sampleorder)
+Sampleorder$sample_order <- sapply(strsplit(as.character(Sampleorder$sample_order), "_f"), "[", 1)
+gene_order <- Sampleorder$gene_order_pathway[1:58]
+
+ha <- HeatmapAnnotation(
+  Tumor_type = Sampleorder$Tumor_type,
+  col = list(
+    # GeneExp_Subtype = c("Classical" = "orange","Mesenchymal" = "green","Neural" = "skyblue" ),
+    Tumor_type = c(
+      "ALCL ALK-" = "#7FCDBB", "ALCL ALK+" = "#2C7FB8", "AITL" = "#FFEDA0", "ATLL" = "#FEB24C",
+      "gamma-delta TCL" = "#F03B20", "MEITL" = "#31A354", "MF" = "#E5F5E0", "NK" = "#A1D99B",
+      "PTCL-NOS" = "#AF8DC3", "t-PLL" = "#FFC1C1", "HSPTCL" = "#6C7B8B"
+    )
+  ),
+  show_annotation_name = TRUE,
+  annotation_name_gp = gpar(fontsize = 7)
+)
+
+
+# plot
+oncoPrint(testmutation_lanscape[gene_order, Sampleorder$sample_order],
+  bottom_annotation = ha,
+  column_order = Sampleorder$sample_order,
+  # column_split = Sampleorder$Tumor_type,
+  row_order = gene_order,
+  # row_order = rownames(testmutation_lanscape),
+  alter_fun = alter_fun,
+  col = col,
+  show_column_names = T,
+  pct_side = "right", row_names_side = "left",
+  # remove_empty_columns = TRUE,
+  # remove_empty_rows = TRUE,
+  # column_title = column_title,
+  # heatmap_legend_param = heatmap_legend_param,
+  alter_fun_is_vectorized = FALSE
+)
+```
+
+## Figure4D S4F
+
+Rscripts
+
+```{r}
+rm(list = ls())
+
+savi.table <- read.table("./tot_snv.txt", sep = "\t", row.names = F, quote = F)
+library(readxl)
+Sample_order <- read_excel("./Sample_order.xlsx", sheet = 1)
+mut_Genes <- Sample_order$gene_order_pathway_terneyplot
+
+savi <- savi.table
+cutoff <- 0.05
+
+
+selGene <- mut_Genes
+
+case <- unique(savi$Sample_name)
+
+Mut.freq <- cbind(rep(0, length(selGene)), rep(0, length(selGene)), rep(0, length(selGene)))
+for (i in 1:length(selGene)) {
+  # savi.Sel <- savi[which(savi$Gene_Name == selGene[i]),]
+  savi.Sel <- savi[which(savi$Hugo_Symbol == selGene[i]), ]
+
+  Mut.freq[i, 1] <- length(unique(savi.Sel$Sample_name[which((savi.Sel$D_freq >= cutoff) & (savi.Sel$R_freq < cutoff))]))
+  Mut.freq[i, 3] <- length(unique(savi.Sel$Sample_name[which((savi.Sel$D_freq < cutoff) & (savi.Sel$R_freq >= cutoff))]))
+  Mut.freq[i, 2] <- length(unique(savi.Sel$Sample_name[which((savi.Sel$D_freq >= cutoff) & (savi.Sel$R_freq >= cutoff))]))
+}
+colnames(Mut.freq) <- c("Diagnosis", "Common", "Relapse")
+rownames(Mut.freq) <- selGene
+Mut.freq <- Mut.freq[which(rowSums(Mut.freq) > 0), ]
+dim(Mut.freq)
+# install.packages("ggtern")
+library("ggtern")
+library("ggplot2")
+ng <- nrow(Mut.freq)
+total <- rep(0, ng)
+color1 <- c(0 / 255, 250 / 255, 154 / 255)
+color2 <- c(70 / 255, 130 / 255, 180 / 255)
+color3 <- c(200 / 255, 0 / 255, 0 / 255)
+temp <- cbind(rep(0, ng), rep(0, ng), rep(0, ng))
+color.value <- rep(0, ng)
+sample.size <- rep(0, ng)
+
+
+
+for (i in 1:nrow(Mut.freq)) {
+  total[i] <- Mut.freq[i, 3] + Mut.freq[i, 2] + Mut.freq[i, 1]
+  sample.size[i] <- Mut.freq[i, 1] + Mut.freq[i, 2] + Mut.freq[i, 3]
+  temp[i, ] <- c(Mut.freq[i, 1] / total[i] * color1 + Mut.freq[i, 2] / total[i] * color2 + Mut.freq[i, 3] / total[i] * color3)
+  color.value[i] <- rgb(temp[i, 1], temp[i, 2], temp[i, 3])
+}
+
+Ternary_plot_data <- as.data.frame(Mut.freq)
+Ternary_plot_data$sample.size <- sample.size
+sample_size <- Ternary_plot_data
+sample_size$Gene_name <- rownames(sample_size)
+
+# Ternary_plot_data$color.value<-color.value
+data <- cbind(rownames(Mut.freq), Ternary_plot_data)
+data <- as.data.frame(data)
+colnames(data)[1] <- "gene_name"
+
+data$set_color <- color.value
+data$set_color <- factor(data$set_color)
+# data<-subset(data, sample.size>1)
+#' Diagnosis','Relapse','Common'
+p <- ggtern(data = data, aes(x = Diagnosis, y = Common, z = Relapse)) +
+  theme_bw(base_size = 25) +
+  geom_point(aes(size = sample.size), shape = 21, color = "black", fill = data$set_color) +
+  theme_nomask() +
+  scale_size_continuous(range = c(4, 20)) +
+  scale_colour_manual(values = levels(data$set_color)) +
+
+  # theme_rgbw(base_size = 20 )+
+  # labs(title = "Ternary plot")+
+  # theme(plot.title = element_text(size=15,hjust = 0.5))+
+  theme(legend.position = "none")
+# + theme_legend_position(x="topright")   #topleft, middleleft, bottomleft, topright, middleright and bottomright
+print(p)
+
+data_lable <- subset(data, sample.size > 0 | gene_name == "TP53")
+p1 <- p + geom_text(
+  data = data_lable,
+  aes(label = data_lable[, 1], size = 1), col = "black", check_overlap = F,
+  hjust = 0.5, vjust = 0
+)
+print(p1)
+
+Figure4E
+# Rscripts
+# TEDG Wang J, Khiabanian H, Rossi D, Fabbri G, Gattei V, Forconi F, et al. Tumor evolutionary directed graphs and the history of chronic lymphocytic leukemia. Elife. 2014;3.
+rm(list = ls())
+
+
+savi_table <- read.delim("./tot_snv.txt")
+savi_table <- savi_table[which(apply(savi_table[, grep("all_count", colnames(savi_table), ignore.case = TRUE)], 1, min) > 5), ]
+savi_table[is.na(savi_table)] <- 0
+
+
+library(readxl)
+Sample_order <- read_excel("./Sample_order.xlsx", sheet = 1)
+mut_Genes <- Sample_order$gene_order_pathway
+# selected_geneList <-mut_Genes
+selected_geneList <- c(
+  "ATM", "TP53", "B2M", "TNFRSF14", "MYD88", "CREBBP", "FAS", "FGFR3", "PKD1", "ZFHX3",
+  "PIM1", "SOCS1", "KMT2D", "CD79B", "BCL2", "SETD1B", "CD58", "EZH2"
+)
+
+# analysis the number of mutations in primary & recurrent samples; and analysis the mutation information of selected genes
+savi <- savi_table
+cutoff <- 0.05
+
+case <- unique(savi$Sample_name)
+
+
+# counting mutations
+mut.primary <- rep(0, length(case))
+mut.recurrence <- rep(0, length(case))
+mut.common <- rep(0, length(case))
+
+for (i in 1:length(case)) {
+  mut.common[i] <- length(which(savi$Sample_name == case[i] & savi$D_freq >= cutoff & savi$R_freq >= cutoff))
+  mut.primary[i] <- length(which(savi$Sample_name == case[i] & savi$D_freq >= cutoff & savi$R_freq < cutoff))
+  mut.recurrence[i] <- length(which(savi$Sample_name == case[i] & savi$D_freq < cutoff & savi$R_freq >= cutoff))
+}
+
+mutation_num_table <- data.frame(case, mut.primary, mut.common, mut.recurrence)
+colnames(mutation_num_table) <- c("Patients", "Primary", "Common", "Recurrent")
+
+
+# analysis for selected genes
+selGene <- selected_geneList
+
+gene.Matrix <- rep("N", length(case))
+for (i in 2:length(selGene)) {
+  gene.Matrix <- cbind(gene.Matrix, rep("N", length(case)))
+}
+
+savi.Sel <- savi[which(savi$Hugo_Symbol %in% selGene), ]
+
+for (i in 1:length(case)) {
+  for (j in 1:length(selGene)) {
+    temp.P <- savi.Sel$D_freq[which(savi.Sel$Sample_name == case[i] & savi.Sel$Hugo_Symbol == selGene[j])]
+    temp.R <- savi.Sel$R_freq[which(savi.Sel$Sample_name == case[i] & savi.Sel$Hugo_Symbol == selGene[j])]
+    if (any(temp.P >= cutoff) & any(temp.R >= cutoff)) {
+      gene.Matrix[i, j] <- "C"
+    } else if (any(temp.P >= cutoff)) {
+      gene.Matrix[i, j] <- "P"
+    } else if (any(temp.R >= cutoff)) {
+      gene.Matrix[i, j] <- "R"
+    } else {}
+  }
+}
+
+colnames(gene.Matrix) <- selGene
+rownames(gene.Matrix) <- case
+
+selStats <- list("mutNum.table" = mutation_num_table, "mutGenes.table" = gene.Matrix)
+
+
+mutation_gene_table <- selStats$mutGenes.table
+input.table <- mutation_gene_table
+selected_geneList <- as.character(colnames(input.table))
+
+# calculating TEDG edge table
+temp <- rep(0, length(selected_geneList))
+edge.matrix <- temp
+for (i in 2:length(selected_geneList)) {
+  edge.matrix <- cbind(edge.matrix, temp)
+}
+
+edge.table <- c("geneA", "geneB", "weight", "label")
+
+end <- length(selected_geneList) - 1
+for (i in 1:end) {
+  start <- i + 1
+  for (j in start:length(selected_geneList)) {
+    edge.matrix[i, j] <- length(which((input.table[, i] == "C") & (input.table[, j] %in% c("P", "R"))))
+    edge.matrix[j, i] <- length(which((input.table[, j] == "C") & (input.table[, i] %in% c("P", "R"))))
+    labelA <- paste(rownames(input.table)[which((input.table[, i] == "C") & (input.table[, j] %in% c("P", "R")))], collapse = ";")
+    labelB <- paste(rownames(input.table)[which((input.table[, j] == "C") & (input.table[, i] %in% c("P", "R")))], collapse = ";")
+
+    if (edge.matrix[i, j] < edge.matrix[j, i]) {
+      edge.matrix[i, j] <- 0
+      edge <- c(selected_geneList[j], selected_geneList[i], edge.matrix[j, i], labelB)
+      edge.table <- rbind(edge.table, edge)
+    } else if (edge.matrix[i, j] > edge.matrix[j, i]) {
+      edge.matrix[j, i] <- 0
+      edge <- c(selected_geneList[i], selected_geneList[j], edge.matrix[i, j], labelA)
+      edge.table <- rbind(edge.table, edge)
+    } else {
+      edge.matrix[i, j] <- 0
+      edge.matrix[j, i] <- 0
+    }
+  }
+}
+
+
+
+rownames(edge.matrix) <- selected_geneList
+colnames(edge.matrix) <- selected_geneList
+
+edge.table <- edge.table[-1, ]
+colnames(edge.table) <- c("geneA", "geneB", "weight", "label")
+rownames(edge.table) <- c(1:nrow(edge.table))
+write.table(edge.table, "select_gene_TEDGedge.txt", row.names = F, quote = F, sep = "\t")
+# calculating TEDG node table
+Mut.freq <- cbind(rep(0, length(selected_geneList)), rep(0, length(selected_geneList)), rep(0, length(selected_geneList)))
+for (i in 1:length(selected_geneList)) {
+  Mut.freq[i, 1] <- length(which(input.table[, i] == "P"))
+  Mut.freq[i, 2] <- length(which(input.table[, i] == "R"))
+  Mut.freq[i, 3] <- length(which(input.table[, i] == "C")) * 2
+}
+
+sample.size <- rep(0, length(selected_geneList))
+for (i in 1:length(selected_geneList)) {
+  sample.size[i] <- Mut.freq[i, 1] + Mut.freq[i, 2] + Mut.freq[i, 3]
+}
+
+ins <- rep(0, length(selected_geneList))
+outs <- rep(0, length(selected_geneList))
+for (i in 1:length(selected_geneList)) {
+  ins[i] <- length(which(edge.matrix[, i] > 0))
+  outs[i] <- length(which(edge.matrix[i, ] > 0))
+}
+
+
+pcdf <- rep(1, length(selected_geneList))
+for (i in 1:length(pcdf)) {
+  if (ins[i] < outs[i]) {
+    # y = binocdf(x,N,p) computes (x,y) that follow binomial dist (N,p)
+    pcdf[i] <- binom.test(ins[i], ins[i] + outs[i], 0.5)$p.value
+  } else {
+    pcdf[i] <- binom.test(outs[i], ins[i] + outs[i], 0.5)$p.value
+  }
+}
+
+fc <- log2((outs + 1) / (ins + 1)) # positive = early; negative = late.
+
+node.table <- data.frame(selected_geneList, pcdf, fc, sample.size)
+colnames(node.table) <- c("Gene", "P_CDF", "FC", "Occurrence")
+node.table <- data.frame(selected_geneList, sample.size)
+colnames(node.table) <- c("Gene", "Occurrence")
+write.table(node.table, "select_gene_TEDGnode.txt", row.names = F, quote = F, sep = "\t")
+```
+
+## Figure4 F G H S4 I J K
+
+```bash
+#PhylogicNDT+fishplot
+#PhylogicNDT Leshchiner I, Livitz D, Gainor JF, Rosebrock D, Spiro O, Martinez A, et al. Comprehensive analysis of tumour initiation, spatial and temporal progression under multiple lines of treatment. 2019:508127.
+python2 ./PhylogicNDT.py Cluster -i samplename  -sif samplename.sif -ni 1000 -rb
+```
+
+```{r}
+# fishplot Miller CA, McMichael J, Dang HX, Maher CA, Ding L, Ley TJ, et al. Visualizing tumor evolution with the fishplot package for R. BMC Genomics. 2016;17(1):880.
+rm(list = ls())
+library(fishplot)
+
+library(dplyr)
+dat1 <- read.table("./samplename_T1_T3_T5.cluster_table.tsv", sep = "\t", header = TRUE, stringsAsFactors = FALSE, comment.char = "", fill = TRUE)
+dat1$T0.CCF <- as.numeric(sapply(strsplit(as.character(dat1$T0.CCF), " "), "[", 1))
+dat1$T1.CCF <- as.numeric(sapply(strsplit(as.character(dat1$T1.CCF), " "), "[", 1))
+dat1$T2.CCF <- as.numeric(sapply(strsplit(as.character(dat1$T2.CCF), " "), "[", 1))
+dat1$T3.CCF <- as.numeric(sapply(strsplit(as.character(dat1$T3.CCF), " "), "[", 1))
+timepoints <- c(0, 10, 20, 30)
+frac.table <- as.matrix(dat1[, 2:5]) * 100
+
+# provide a vector listing each clone's parent
+# (0 indicates no parent)
+parents <- c(0, 1, 2, 3, 3, 4)
+# create a fish object
+fish <- createFishObject(frac.table, parents, timepoints = timepoints)
+# pass the colors vector
+color.vector <- c("#7FCDBB", "#2C7FB8", "#FFEDA0", "#FEB24C", "#F03B20", "#31A354")
+fish <- setCol(fish, color.vector)
+
+# calculate the layout of the drawing
+fish <- layoutClones(fish)
+
+# draw the plot, using the splining method (recommended)
+# and providing both timepoints to label and a plot title
+fishPlot(fish,
+  shape = "spline", title.btm = "IL54",
+  cex.title = 1, vlines = c(0, 10, 20, 30),
+  vlab = c("Primary", "T1", "T3", "T5")
+)
+```
+
+
+## Figure4 I J
+
+```{r}
+# Nei’s genetic distances
+rm(list = ls())
+library(readxl)
+library(tidyr)
+library(dplyr)
+
+sample_info1 <- read_excel("./P_T1_T5clonal_or_subclonal.xlsx", sheet = 1)
+neimat <- matrix(data = NA, nrow = 1, ncol = 3)
+P_T_neimat <- matrix(data = NA, nrow = 1, ncol = 6)
+P_T_neilist <- matrix(data = NA, nrow = 1, ncol = 6)
+Colname_P_T_neimat <- c("Primary", "T1", "T2", "T3", "T4", "T5")
+colnames(P_T_neimat) <- Colname_P_T_neimat
+colnames(P_T_neilist) <- Colname_P_T_neimat
+
+
+for (subcat in unique(sample_info1$Patient)) {
+  subP_T_neilist <- matrix(data = NA, nrow = 1, ncol = 6)
+  subP_T_neimat <- matrix(data = NA, nrow = 1, ncol = 6)
+  colnames(subP_T_neimat) <- Colname_P_T_neimat
+  colnames(subP_T_neilist) <- Colname_P_T_neimat
+
+  maf_data <- sample_info1[which(sample_info1$Patient == subcat), ]
+  Nei_input <- maf_data %>%
+    tidyr::unite("Mut_ID", c("Chromosome", "Start_position", "Reference_Allele", "Tumor_Seq_Allele2"), sep = ":", remove = FALSE) %>%
+    dplyr::select("Mut_ID", "Patient", "Sample", "CCF") %>%
+    dplyr::filter(!is.na(.data$CCF))
+  head(Nei_input)
+  samples <- as.character(unique(Nei_input$Sample))
+  pairs <- utils::combn(samples, 2, simplify = FALSE)
+  dist_mat <- diag(1, nrow = length(samples), ncol = length(samples))
+  dist_mat <- cbind(dist_mat, samples)
+  rownames(dist_mat) <- samples
+  colnames(dist_mat) <- c(samples, "name")
+  processNeipair <- function(pair) {
+    ccf.pair <- subset(Nei_input, Nei_input$Sample %in%
+      c(pair[1], pair[2])) %>%
+      dplyr::mutate(CCF = as.numeric(.data$CCF)) %>%
+      as.data.frame() %>%
+      tidyr::pivot_wider(names_from = "Sample", values_from = "CCF", values_fill = list(CCF = 0)) %>%
+      dplyr::select(-"Mut_ID", -"Patient")
+    colnames(ccf.pair) <- c("ccf1", "ccf2")
+    x <- ccf.pair$ccf1
+    y <- ccf.pair$ccf2
+    x_ <- sum(x^2 + (1 - x)^2)
+    y_ <- sum(y^2 + (1 - y)^2)
+    xy <- sum(x * y + (1 - x) * (1 - y))
+    nei_dist <- -log(xy / sqrt(x_ * y_))
+    return(nei_dist)
+  }
+  nei.list <- lapply(pairs, processNeipair) %>% unlist()
+  pairs_name <- lapply(pairs, function(x) paste0(x[1], "_", x[2])) %>% unlist()
+  names(nei.list) <- pairs_name
+  processNeiMat <- function(j) {
+    row_name <- j["name"]
+    j1 <- j[-length(j)]
+    idx <- which(j == "0")
+    j2 <- names(j[idx])
+    mat_row <- vapply(j2, function(g) {
+      name1 <- paste0(g, "_", row_name)
+      name2 <- paste0(row_name, "_", g)
+      pos <- which(grepl(paste0("^", name1, "$"), names(nei.list)))
+      if (length(pos) == 0) {
+        pos <- which(grepl(paste0("^", name2, "$"), names(nei.list)))
+      }
+      nei <- nei.list[pos]
+      return(nei)
+    }, FUN.VALUE = double(1))
+    j[idx] <- mat_row
+    return(j)
+  }
+  dist_mat <- t(apply(dist_mat, 1, processNeiMat))
+  dist_mat <- dist_mat[, -ncol(dist_mat)] %>% apply(c(1, 2), as.numeric)
+  subneilist <- c()
+  m <- 1
+  while (m < length(colnames(dist_mat))) {
+    subpair_name <- paste0(colnames(dist_mat)[m], "_", colnames(dist_mat)[m + 1])
+
+    subneilist <- c(subneilist, subpair_name)
+
+    m <- m + 1
+  }
+
+
+  colnames_mat <- sapply(strsplit(colnames(dist_mat), "_(?=[^_]+$)", perl = TRUE), "[", 2)
+  subP_T_neimat[which(Colname_P_T_neimat %in% colnames_mat)] <- dist_mat[1, ]
+  P_T_neimat <- rbind(P_T_neimat, subP_T_neimat)
+  subP_T_neilist[which(Colname_P_T_neimat %in% colnames_mat)] <- c(0, nei.list[subneilist])
+  P_T_neilist <- rbind(P_T_neilist, subP_T_neilist)
+
+  Nei.dist.avg <- mean(dist_mat[upper.tri(dist_mat, diag = FALSE)])
+  subneimat <- c(subcat, unique(maf_data$subcategories), Nei.dist.avg)
+  neimat <- rbind(neimat, subneimat)
+}
+P_T_neilist <- P_T_neilist[-1, ]
+P_T_neimat <- P_T_neimat[-1, ]
+P_T_neimat[, 1] <- 0
+neimat <- neimat[-1, ]
+neimat <- as.data.frame(neimat)
+colnames(neimat) <- c("Model", "Subcategory", "Avg_Nei_distance")
+rownames(neimat) <- neimat$Model
+rownames(P_T_neilist) <- neimat$Model
+rownames(P_T_neimat) <- neimat$Model
+
+
+write.table(neimat, file = "neimat.txt", quote = FALSE, sep = "\t", row.names = T, col.names = T)
+write.table(P_T_neilist, file = "P_T_neilist.txt", quote = FALSE, sep = "\t", row.names = T, col.names = T)
+write.table(P_T_neimat, file = "P_T_neimat.txt", quote = FALSE, sep = "\t", row.names = T, col.names = T)
+```
+
+## FigureS4A
+
+Rscripts
+
+```{r}
+rm(list = ls())
+library(readxl)
+library(dplyr)
+human_or_mouse_reads <- read_excel("./human_or_mouse_reads.xlsx", sheet = 1)
+human_or_mouse_reads <- as.data.frame(human_or_mouse_reads)
+human_or_mouse_reads$sample_order <- sapply(strsplit(as.character(human_or_mouse_reads$sample_order), "_f"), "[", 1)
+colnames(human_or_mouse_reads)[7] <- "rate"
+
+human_or_mouse_reads$Tumor_type <- factor(human_or_mouse_reads$Tumor_type, levels = c(
+  "PTCL-NOS", "ALCL ALK-", "ALCL ALK+", "ATLL", "AITL",
+  "NK", "MF", "gamma-delta TCL", "t-PLL", "HSPTCL", "MEITL", "mouse"
+))
+
+dat1 <- human_or_mouse_reads %>%
+  group_by(sample) %>%
+  mutate(mean_rate = mean(rate)) %>%
+  ungroup()
+dat2 <- dat1[, c("sample", "Tumor_type", "mean_rate")] %>% distinct()
+
+library(ggpubr)
+p <- ggboxplot(dat2, x = "Tumor_type", y = "mean_rate", color = "Tumor_type", palette = "simpsons", size = 0.6) +
+  labs(y = "mm10/(hg19 + mm10)") + theme(axis.text.x = element_text(size = 8), legend.position = "right")
+p
+```
+
+## FigureS4B
+
+Rscripts
+
+```{r}
+# devtools::install_github("ccbiolab/svpluscnv")
+rm(list = ls())
+library(svpluscnv)
+library(D3GB)
+library(data.table)
+library(GenomicRanges)
+# Primary_segdat <- read.table(file = "./CNVdata_Primary.seg", sep = "\t",header = TRUE,stringsAsFactors = FALSE,comment.char = "", fill = TRUE)
+PDTX_segdat <- read.table(file = "./CNVdata_PDTX.seg", sep = "\t", header = TRUE, stringsAsFactors = FALSE, comment.char = "", fill = TRUE)
+# cnv <- validate.cnv(Primary_segdat)
+cnv <- validate.cnv(PDTX_segdat)
+cnv_freq <- cnv.freq(cnv, fc.pct = 0.2, ploidy = FALSE)
+
+fc.pct <- 0.2
+genome.v <- "hg19"
+ploidy <- FALSE
+g.bin <- 1
+sampleids <- NULL
+cex.axis <- 1
+cex.lab <- 1
+label.line <- -1.2
+plot <- TRUE
+verbose <- TRUE
+
+cnvdat <- cnv@data
+bands <- GRCh37.bands
+# q
+centromeres <- bands[intersect(which(bands$score == "acen"), grep("q", bands$name)), "start"]
+names(centromeres) <- paste("chr", bands[intersect(which(bands$score == "acen"), grep("q", bands$name)), "chr"], sep = "")
+# list chrom    begin       end
+chrlimits <- chromosome.limit.coords(cnv)
+offset <- c(0, vapply(seq_len(nrow(chrlimits) - 1), function(i) sum(chrlimits[seq_len(i), "end"]) + i * g.bin, 1))
+chrlabelpos <- offset + chrlimits$end / 2
+chrlimits <- data.frame(offset, as.data.frame(chrlimits), chrlabelpos)
+rownames(chrlimits) <- chrlimits$chrom
+g.bin.mb <- g.bin * 1e+06
+if (verbose) {
+  message("Generating binned genome map ")
+}
+chrbins <- list()
+for (chr in rownames(chrlimits)) {
+  seqpos <- seq(chrlimits[chr, "begin"], chrlimits[chr, "end"] + g.bin.mb, g.bin.mb)
+  ranges <- t(vapply(seq(2, length(seqpos)), function(i) c(seqpos[i - 1], seqpos[i]), double(2)))
+  chrcol <- rep(chr, length(seqpos) - 1)
+  # set color grey
+  segcol_del <- segcol_gain <- rep("grey", length(chrcol))
+
+  segcol_del[which(ranges[, 2] <= centromeres[chr])] <- "blue"
+  segcol_del[which(ranges[, 2] > centromeres[chr])] <- "blue"
+  segcol_gain[which(ranges[, 2] <= centromeres[chr])] <- "red"
+  segcol_gain[which(ranges[, 2] > centromeres[chr])] <- "red"
+  chrbins[[chr]] <- data.table(chrcol, ranges, segcol_del, segcol_gain)
+}
+chrbins.df <- do.call(rbind, unname(chrbins))
+chrbins.df <- data.table(chrbins.df, unite(chrbins.df[, c(1, 2, 3)], paste)$paste)
+colnames(chrbins.df) <- c("chr", "start", "end", "segcol_del", "segcol_gain", "binid")
+if (verbose) {
+  message("Calculating mean segmean per genomic bin")
+}
+binsGR <- with(chrbins.df, GRanges(chr, IRanges(start = start, end = end)))
+segGR <- with(cnvdat, GRanges(chrom, IRanges(start = start, end = end)))
+hits <- GenomicAlignments::findOverlaps(binsGR, segGR)
+outmat <- matrix(ncol = length(unique(cnvdat$sample)), nrow = nrow(chrbins.df))
+colnames(outmat) <- unique(cnvdat$sample)
+rownames(outmat) <- chrbins.df$binid
+for (i in seq_len(nrow(chrbins.df))) {
+  segtmp <- cnvdat[subjectHits(hits)[which(queryHits(hits) ==
+    i)], ]
+  if (nrow(segtmp) > 0) {
+    a <- aggregate(segmean ~ sample, segtmp, sum)
+    outmat[i, a$sample] <- a$segmean
+  } else {
+    outmat[i, a$sample] <- NA
+  }
+}
+if (verbose) {
+  message("Calculating gain/loss frequencies per genomic bin")
+}
+outmat[which(is.na(outmat), arr.ind = TRUE)] <- 0
+outmat_gain <- outmat_loss <- outmat
+outmat_gain[] <- outmat_loss[] <- 0
+nsamples <- ncol(outmat_gain)
+outmat_gain[which(outmat > log2(1 + fc.pct), arr.ind = TRUE)] <- 1
+outmat_loss[which(outmat < log2(1 - fc.pct), arr.ind = TRUE)] <- 1
+freq.gains <- apply(outmat_gain, 1, sum) / nsamples
+freq.loss <- apply(outmat_loss, 1, sum) / nsamples
+if (plot) {
+  plot.end <- chrlimits$offset[nrow(chrlimits)] + chrlimits$end[nrow(chrlimits)]
+  bin.loc <- chrlimits[
+    chrbins.df[names(freq.gains), on = "binid"]$chr,
+    "offset"
+  ] + chrbins.df[names(freq.gains), ,
+    on = "binid"
+  ]$start
+  if (verbose) {
+    message("Plotting ...")
+  }
+  altcols <- rep(c(rgb(0.1, 0.1, 0.1, alpha = 0.1), rgb(0.8,
+    0.8, 0.8,
+    alpha = 0.1
+  )), 12)
+  altcols2 <- rep(c(rgb(0.1, 0.1, 0.1, alpha = 1), rgb(0.4,
+    0.4, 0.4,
+    alpha = 1
+  )), 12)
+  plot(
+    x = NULL, y = NULL, xlim = c(0, plot.end), ylim = c(
+      -1,
+      1
+    ), bty = "n", xaxt = "n", yaxt = "n",
+    xlab = "", ylab = ""
+  )
+  for (i in seq_len(length(chrlimits$offset))) {
+    rect(chrlimits$offset[i],
+      -1, chrlimits$offset[i] + chrlimits$end[i], 1,
+      col = altcols[i],
+      border = NA
+    )
+  }
+  points(bin.loc, freq.gains, type = "h", col = chrbins.df$segcol_gain)
+  points(bin.loc, -freq.loss, type = "h", col = chrbins.df$segcol_del)
+  lines(c(0, plot.end), c(0, 0), col = "lightgrey")
+  lines(c(0, plot.end), c(0.5, 0.5),
+    col = "lightgrey",
+    lty = 3
+  )
+  lines(c(0, plot.end), c(-0.5, -0.5),
+    col = "lightgrey",
+    lty = 3
+  )
+  mtext(gsub("chr", "", rownames(chrlimits))[seq(1, nrow(chrlimits), 2)], side = 1, at = chrlimits$chrlabelpos[seq(1, nrow(chrlimits), 2)], las = 1, col = altcols2[seq(1, nrow(chrlimits), 2)], line = label.line, cex = cex.lab)
+  mtext(gsub("chr", "", rownames(chrlimits))[seq(2, nrow(chrlimits), 2)], side = 3, at = chrlimits$chrlabelpos[seq(2, nrow(chrlimits), 2)], las = 1, col = altcols2[seq(2, nrow(chrlimits), 2)], line = label.line, cex = cex.lab)
+  mtext("Frequency", side = 4, line = 1)
+  mtext("#samples", side = 2, line = 1)
+  axis(4, c(100, 50, 0, 50, 100), at = c(
+    -1, -0.5, 0, 0.5,
+    1
+  ), las = 1, pos = plot.end, cex.axis = cex.axis)
+  axis(2, c(
+    nsamples, round(nsamples / 2), 0, round(nsamples / 2),
+    nsamples
+  ),
+  at = c(-1, -0.5, 0, 0.5, 1), las = 1,
+  pos = 0, cex.axis = cex.axis
+  )
+  p <- recordPlot()
+} else {
+  p <- recordPlot(load = NULL, attach = NULL)
+}
+summary <- data.table(chrbins.df[, c(
+  "chr", "start",
+  "end"
+)], bin.loc, freq.gains, freq.loss)
+```
+
+## FigureS4C S4E
+
+Rscripts
+
+```{r}
+rm(list = ls())
+Stacked_histogram_data <- read.table("./mutation_report.txt", sep = "\t", header = TRUE, stringsAsFactors = FALSE, comment.char = "", fill = TRUE)
+Stacked_histogram_data$Primary_freq <- as.numeric(Stacked_histogram_data$Primary_freq)
+Stacked_histogram_data$PDTX_freq <- as.numeric(Stacked_histogram_data$PDTX_freq)
+Stacked_histogram_data[is.na(Stacked_histogram_data)] <- 0
+Stacked_histogram_data <- Stacked_histogram_data[-which(Stacked_histogram_data$Primary_freq == 0 & Stacked_histogram_data$PDTX_freq == 0), ]
+dim(Stacked_histogram_data)
+Stacked_histogram_data <- Stacked_histogram_data[-which(Stacked_histogram_data$Primary_freq < 5 & Stacked_histogram_data$PDTX_freq < 5), ]
+dim(Stacked_histogram_data)
+Stacked_histogram_data$mut_type <- NA
+
+
+for (i in 1:nrow(Stacked_histogram_data)) {
+  if (Stacked_histogram_data[i, "Primary_freq"] >= 5 & Stacked_histogram_data[i, "PDTX_freq"] < 5) {
+    Stacked_histogram_data[i, "mut_type"] <- "Primary tumor private"
+  }
+  if (Stacked_histogram_data[i, "Primary_freq"] >= 5 & Stacked_histogram_data[i, "PDTX_freq"] >= 5) {
+    Stacked_histogram_data[i, "mut_type"] <- "Shared"
+  }
+  if (Stacked_histogram_data[i, "Primary_freq"] < 5 & Stacked_histogram_data[i, "PDTX_freq"] >= 5) {
+    Stacked_histogram_data[i, "mut_type"] <- "PDTX_freq private"
+  }
+}
+
+
+library(reshape)
+widedata <- Stacked_histogram_data[, c("X.chromosome", "position", "ref", "alt", "Primary_freq", "PDTX_freq", "CaseID", "mut_type")]
+median(widedata$Primary_freq)
+median(widedata$PDTX_freq)
+longdata1 <- melt(widedata, id = c("X.chromosome", "position", "ref", "alt", "CaseID", "mut_type"))
+library(ggpubr)
+# FigureS4E
+p <- ggboxplot(longdata1,
+  x = "variable", y = "value", color = "variable",
+  palette = "jco"
+) # 添加p-valuep+stat_compare_means()
+p + stat_compare_means(method = "t.test", label.x = 1.5, label.y = 100)
+
+# wilcox.test
+p + stat_compare_means(method = "wilcox.test", label.x = 1.5, label.y = 100)
+
+library(ggplot2)
+
+Stacked_histogram_data$mut_type <- factor(Stacked_histogram_data$mut_type)
+Stacked_histogram_data$mut_type <- factor(Stacked_histogram_data$mut_type, levels = c("Shared", "Primary tumor private", "PDTX_freq private"))
+Stacked_histogram_data2 <- Stacked_histogram_data
+Stacked_histogram_data2$CaseID <- "ALL"
+Stacked_histogram_data3 <- rbind(Stacked_histogram_data, Stacked_histogram_data2)
+```
+
+## FigureS4C
+
+```{r}
+p <- ggplot(Stacked_histogram_data3, aes(CaseID, fill = mut_type)) +
+  geom_bar(color = "black", width = .7, position = "fill") +
+  theme_bw() +
+  labs(y = "Relative abundance (%)") +
+  scale_fill_brewer(palette = "Set3") +
+  scale_y_continuous(expand = c(0, 0)) +
+  # geom_text(aes(label=proportion, y=proportion+0.05), position=position_dodge(0.9), vjust=0) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 0, vjust = 0))
+# theme_classic()
+plot(p)
+```
+
+
+## FigureS4D
+
+Rscripts
+
+```{r}
+# SomaticSignatures  Gehring JS, Fischer B, Lawrence M, Huber W. SomaticSignatures: inferring mutational signatures from single-nucleotide variants. Bioinformatics. 2015;31(22):3673-5.
+rm(list = ls())
+path <- "./mutation_signature/"
+setwd(path)
+library(IRanges)
+library(SomaticSignatures)
+library(SomaticCancerAlterations)
+library(BSgenome.Hsapiens.1000genomes.hs37d5)
+library(BSgenome.Hsapiens.UCSC.hg19)
+
+library(MutationalPatterns)
+ref_genome <- "BSgenome.Hsapiens.UCSC.hg19"
+library(ref_genome, character.only = TRUE)
+library(RColorBrewer)
+
+Primary.vcf <- "./Primary.vcf"
+Xenograft.vcf <- "./Xenograft.vcf"
+vcfs <- read_vcfs_as_granges(c("Primary.vcf", "Xenograft.vcf"), c("Primary", "Xenograft"), ref_genome)
+type_occurrences <- mut_type_occurrences(vcfs, ref_genome)
+
+mut_mat <- mut_matrix(vcf_list = vcfs, ref_genome = ref_genome)
+pdf("ALL_mutation_signature2.pdf",
+  height = 4, width = 8
+)
+plot_96_profile(mut_mat)
+dev.off()
+
+sp_url <- paste("http://cancer.sanger.ac.uk/cancergenome/assets/",
+  "signatures_probabilities.txt",
+  sep = ""
+)
+cancer_signatures <- read.table(sp_url, sep = "\t", header = TRUE)
+cancer_signatures <- cancer_signatures[order(cancer_signatures[, 1]), ]
+cancer_signatures <- as.matrix(cancer_signatures[, 4:33])
+
+color_palette <- c("#3366cc", "#dc3912", "blue", "#109618", "#990099", "#0099c6", "#dd4477", "#66aa00", "#b82e2e", "#316395", "#994499", "#22aa99", "#aaaa11", "#6633cc", "#e67300", "#8b0707", "#651067", "#329262", "#5574a6", "#3b3eac")
+
+pdf("ALL.mutation_signature_contribution_Illumina2.pdf",
+  height = 6, width = 4
+)
+fit_res <- fit_to_signatures(mut_mat, cancer_signatures)
+select <- which(rowSums(fit_res$contribution) > 0)
+plot_contribution(fit_res$contribution[select, ],
+  cancer_signatures[, select],
+  coord_flip = FALSE,
+  palette = colorRampPalette(brewer.pal(12, "Paired"))(21)
+)
+dev.off()
+```
